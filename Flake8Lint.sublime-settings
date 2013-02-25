@@ -2,11 +2,22 @@
 	// run flake8 lint on file saving
 	"lint_on_save": true,
 
+    //run flake8 lint on file loading
+    "lint_on_load": true,
+
 	// popup a dialog of detected conditions?
 	"popup": true,
 
 	// highlight detected conditions?
 	"highlight": true,
+
+    // Set the style of highlights to use.  This setting is only used if 
+    // "highlight" is set true.  
+    // - 'fill' to fill the background of each error with color 
+    // - 'outline' to draw an outline around each error
+    // - 'none' to not draw any indication of the error (use this with gutter
+    //      marks enabled to show marks without cluttering the text area)
+    "highlight-style": "outline",
 
 	// set python interpreter (lint files for python >= 2.7):
 	// - 'internal' for use internal Sublime Text 2 interpreter (2.6)
@@ -27,5 +38,12 @@
 	// select errors and warnings (e.g. ["E", "W6"])
 	"select": [],
 	//skip errors and warnings (e.g. ["E303", E4", "W"])
-	"ignore": []
+	"ignore": [],
+
+    // The following items are considered errors, and will be highlighted in the
+    // same manner as syntax errors
+    "errors": [],
+
+    // set true to show a mark in the gutter on all highlighted lines
+    "gutter-marks": true
 }

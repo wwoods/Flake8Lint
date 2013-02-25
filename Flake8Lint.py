@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import os
+import time
 
 import sublime
 import sublime_plugin
@@ -13,10 +14,31 @@ FLAKE_DIR = os.path.dirname(os.path.abspath(__file__))
 viewToRegionToErrors = {}
 
 
+RESULTS_PANE = None
+
+def getMessage(view, line):
+    regs = (view.get_regions('flake8-errors') 
+            + view.get_regions('flake8-warnings'))
+    viewStorage = viewToRegionToErrors.get(view.id())
+    if viewStorage is None:
+        return
+    tips = []
+    for reg in regs:
+        if reg.intersects(line):
+            tips.append(
+                    viewStorage.get(reg.a, {}).get('error', '(Unrecognized)'))
+    return tips
+
+
 class Flake8LintCommand(sublime_plugin.TextCommand):
     """
     Do flake8 lint on current file.
     """
+    FILL_STYLES = {
+        'fill': sublime.DRAW_EMPTY,
+        'outline': sublime.DRAW_OUTLINED,
+        'none': sublime.HIDDEN
+    }
     def run(self, edit):
         """
         Run flake8 lint.
@@ -85,16 +107,15 @@ class Flake8LintCommand(sublime_plugin.TextCommand):
         select = settings.get('select') or []
         ignore = settings.get('ignore') or []
 
-        regions = []
+        errors = []
+        warnings = []
         viewStorage = viewToRegionToErrors[self.view.id()] = {}
 
         errors_list_filtered = []
         for e in self.errors_list:
             # get error line
-            text_point = self.view.text_point(e[0] - 1, 0)
-            line = self.view.full_line(text_point)
-            full_line_text = self.view.substr(line)
-            line_text = full_line_text.strip()
+            text_point = self.view.text_point(e[0] - 1, e[1] + 1)
+            line_text = self.view.substr(self.view.line(text_point))
 
             # skip line if 'noqa' defined
             if skip_line(line_text):
@@ -117,17 +138,33 @@ class Flake8LintCommand(sublime_plugin.TextCommand):
                 errors_list_filtered.append(e)
                 errors_to_show.append(error)
 
-            indent = len(full_line_text) - len(full_line_text.lstrip())
-            region = sublime.Region(text_point + indent, 
-                    text_point + indent + len(line_text))
+            if e[1]:
+                region = self.view.word(text_point)
+            else:
+                region = self.view.line(text_point)
             viewStorage[region.a] = { 'error': error[0] }
-            regions.append(region)
+            # a warning if the code is from pep8, unless the user has specified
+            # it as an error.  Everything without a code (just syntax errror?)
+            # are always errors
+            if ((code.startswith('W') or code.startswith('E'))
+                    and code not in settings.get('errors', [])):
+                warnings.append(region)
+            else:
+                errors.append(region)
+
+        mark = 'circle' if settings.get('gutter-marks') else ''
+        style = self.FILL_STYLES.get(
+                settings.get('highlight-style')) or self.FILL_STYLES['fill']
 
         if settings.get('highlight'):
             # It may not make much sense, but string is the best coloration,
             # as far as I can tell.
-            self.view.add_regions('flake8-errors', regions, "string", "",
-                    sublime.DRAW_EMPTY)
+            self.view.add_regions('flake8-errors', errors, 
+                    "flake8lint.error", mark, style)
+            time.sleep(0.1)
+            self.view.add_regions('flake8-warnings', warnings, 
+                "flake8lint.warning", mark, style)
+
 
         # renew errors list with selected and ignored errors
         self.errors_list = errors_list_filtered
@@ -136,6 +173,68 @@ class Flake8LintCommand(sublime_plugin.TextCommand):
             # view errors window
             self.view.window().show_quick_panel(errors_to_show,
                                                 self.error_selected)
+
+        if settings.get('results_pane'):
+            resultsPane = self._getResultsPane()
+            
+            edit = resultsPane.begin_edit()
+            try:
+                resultsPane.erase(edit, sublime.Region(0, resultsPane.size()))
+                problems = sorted(errors + warnings, key = lambda r: r.begin())
+                resultsPane.insert(edit, 0, self.view.file_name() + ':')
+                resultsPane.insert(edit, resultsPane.size(), '\n')
+                resultsPane.insert(edit, resultsPane.size(), '\n')
+                for problem in problems:
+                    line = self.view.line(problem.begin())
+                    lineNumber, col = self.view.rowcol(problem.begin())
+                    messages = getMessage(self.view, line)
+                    resultsPane.insert(edit, resultsPane.size(), 
+                            self._formatMessage(lineNumber, 
+                                self.view.substr(line), messages))
+
+                if not problems:
+                    resultsPane.insert(edit, resultsPane.size(), 
+                        '--    pass    --')
+            finally:
+                resultsPane.end_edit(edit)
+
+
+    def _formatMessage(self, lineNumber, line, messages):
+        lineNumber += 1
+
+        if len(line) > 80:
+            line = line[:77] + '...'
+        spacer1 = ' ' * (4 - len(str(lineNumber)))
+        spacer2 = ' ' * (81 - len(line))
+        
+        return '{sp1}{lineNumber}: {text}{sp2}{message}\n'.format(
+                lineNumber = lineNumber, text = line, sp1 = spacer1,
+                sp2 = spacer2, message = " / ".join(messages))
+
+
+    def _getResultsPane(self):
+        """Returns the results pane; creating one if necessary
+        """
+        window = sublime.active_window()
+        resultsPane = [v for v in window.views() 
+            if v.name() == 'Lint Results']
+        if resultsPane:
+            v = resultsPane[0]
+            window.focus_view(v)
+            window.focus_view(self.view)
+            return resultsPane[0]
+
+        #otherwise, create a new view, and name it 'Lint Results'
+        results = self.view.window().new_file()
+        results.set_name('Lint Results')
+        settings = results.settings()
+        settings.set('syntax', os.path.join(
+                'Packages', 'Default', 'Find Results.hidden-tmLanguage'))
+        settings.set('rulers', [6, 86])
+
+        results.set_scratch(True)
+        return results
+
 
     def error_selected(self, item_selected):
         """
@@ -170,18 +269,8 @@ class Flake8LintBackground(sublime_plugin.EventListener):
 
 
     def on_selection_modified(self, view):
-        regs = view.get_regions('flake8-errors')
-        selLine = view.line(view.sel()[0])
-        viewStorage = viewToRegionToErrors.get(view.id())
-        if viewStorage is None:
-            return
-        tip = []
-        for reg in regs:
-            if reg.intersects(selLine):
-                tip.append(viewStorage.get(reg.a, {}).get('error', 
-                        '(Unrecognized)'))
-
-        if tip:
-            view.set_status('flake8-tip', ' / '.join(tip))
+        message = getMessage(view, view.line(view.sel()[0]))
+        if message:
+            view.set_status('flake8-tip', ' / '.join(message))
         else:
             view.erase_status('flake8-tip')

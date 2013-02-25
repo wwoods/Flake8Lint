@@ -463,8 +463,7 @@ class Checker(object):
                 self.scopeStack[0][node.id].used = (self.scope, node.lineno)
             except KeyError:
                 if ((not hasattr(__builtin__, node.id))
-                        and node.id not in _MAGIC_GLOBALS
-                        and not importStarred):
+                        and node.id not in _MAGIC_GLOBALS):
                     if (os.path.basename(self.filename) == '__init__.py' and
                         node.id == '__path__'):
                         # the special name __path__ is valid only in packages
