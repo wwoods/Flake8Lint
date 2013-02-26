@@ -8,6 +8,9 @@
 	// popup a dialog of detected conditions?
 	"popup": true,
 
+    // results pane?
+    "results_pane": false,
+
 	// highlight detected conditions?
 	"highlight": true,
 
@@ -17,7 +20,7 @@
     // - 'outline' to draw an outline around each error
     // - 'none' to not draw any indication of the error (use this with gutter
     //      marks enabled to show marks without cluttering the text area)
-    "highlight-style": "outline",
+    "highlight_style": "outline",
 
 	// set python interpreter (lint files for python >= 2.7):
 	// - 'internal' for use internal Sublime Text 2 interpreter (2.6)
@@ -37,13 +40,13 @@
 
 	// select errors and warnings (e.g. ["E", "W6"])
 	"select": [],
-	//skip errors and warnings (e.g. ["E303", E4", "W"])
+	// skip errors and warnings (e.g. ["E303", E4", "W"])
 	"ignore": [],
 
-    // The following items are considered errors, and will be highlighted in the
-    // same manner as syntax errors
+    // The following items are considered errors, and will be highlighted in
+    // the same manner as syntax errors
     "errors": [],
 
     // set true to show a mark in the gutter on all highlighted lines
-    "gutter-marks": true
+    "gutter_marks": true
 }

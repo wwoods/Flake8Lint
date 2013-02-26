@@ -8,17 +8,13 @@ import sublime_plugin
 from flake8_harobed.util import skip_line
 from lint import lint, lint_external
 
-
 settings = sublime.load_settings("Flake8Lint.sublime-settings")
 FLAKE_DIR = os.path.dirname(os.path.abspath(__file__))
 viewToRegionToErrors = {}
 
-
-RESULTS_PANE = None
-
 def getMessage(view, line):
-    regs = (view.get_regions('flake8-errors') 
-            + view.get_regions('flake8-warnings'))
+    regs = (view.get_regions('flake8_errors')
+            + view.get_regions('flake8_warnings'))
     viewStorage = viewToRegionToErrors.get(view.id())
     if viewStorage is None:
         return
@@ -152,17 +148,18 @@ class Flake8LintCommand(sublime_plugin.TextCommand):
             else:
                 errors.append(region)
 
-        mark = 'circle' if settings.get('gutter-marks') else ''
+        mark = 'circle' if settings.get('gutter_marks') else ''
         style = self.FILL_STYLES.get(
-                settings.get('highlight-style')) or self.FILL_STYLES['fill']
+                settings.get('highlight_style')) or self.FILL_STYLES['fill']
 
         if settings.get('highlight'):
             # It may not make much sense, but string is the best coloration,
             # as far as I can tell.
-            self.view.add_regions('flake8-errors', errors, 
+            self.view.add_regions('flake8_errors', errors,
                     "flake8lint.error", mark, style)
-            time.sleep(0.1)
-            self.view.add_regions('flake8-warnings', warnings, 
+            # add_regions called in rapid succession can cause issues.
+            time.sleep(0.01)
+            self.view.add_regions('flake8_warnings', warnings,
                 "flake8lint.warning", mark, style)
 
 
@@ -260,6 +257,13 @@ class Flake8LintBackground(sublime_plugin.EventListener):
     """
     Listen to Siblime Text 2 events.
     """
+    def on_activated(self, view):
+        if settings.get('lint_on_load', True):
+            if (view.id() not in viewToRegionToErrors
+                    and view.file_name() is not None):
+                self._lintOnLoad(view)
+
+
     def on_post_save(self, view):
         """
         Do lint on file save if not denied in settings.
@@ -271,6 +275,20 @@ class Flake8LintBackground(sublime_plugin.EventListener):
     def on_selection_modified(self, view):
         message = getMessage(view, view.line(view.sel()[0]))
         if message:
-            view.set_status('flake8-tip', ' / '.join(message))
+            view.set_status('flake8_tip', ' / '.join(message))
         else:
-            view.erase_status('flake8-tip')
+            view.erase_status('flake8_tip')
+
+
+    def _lintOnLoad(self, view, isFirst = True):
+        if isFirst:
+            sublime.set_timeout((lambda: self._lintOnLoad(view, False)), 500)
+            return
+
+        if view.is_loading():
+            sublime.set_timeout((lambda: self._lintOnLoad(view, False)), 100)
+            return
+        elif view.window().active_view().id() != view.id():
+            # Not active anymore, don't lint it!
+            return
+        view.run_command("flake8_lint")
