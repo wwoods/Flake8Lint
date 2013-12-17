@@ -1,5 +1,11 @@
 # -*- coding: utf-8 -*-
+
+from __future__ import absolute_import, print_function
+
 import os
+import sys
+
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 # We will use Stéphane Klein fork of flake8 until it not merged into flake8.
 # This version includes last version of pep8.
@@ -62,8 +68,8 @@ def lint(filename, settings):
         warnings.extend(pep8style.options.report.errors)
 
     # check complexity
-    complexity = settings.get('complexity', -1)
-    if complexity > -1:
+    complexity = settings.get('complexity', None)
+    if complexity is not None and complexity > -1:
         warnings.extend(mccabe.get_module_complexity(filename, complexity))
 
     return warnings
@@ -113,6 +119,7 @@ def lint_external(filename, settings, interpreter, linter):
 
     # parse STDOUT for warnings and errors
     for line in proc.stdout:
+        line = line.decode('utf8')
         warning = line.strip().split(':', 2)
         if len(warning) == 3:
             warnings.append((int(warning[0]), int(warning[1]), warning[2]))
@@ -141,4 +148,4 @@ if __name__ == "__main__":
 
     # run lint and print errors
     for warning in lint(filename, settings):
-        print "%d:%d:%s" % warning
+        print("%d:%d:%s" % warning)

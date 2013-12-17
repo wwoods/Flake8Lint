@@ -5,10 +5,14 @@ import time
 import sublime
 import sublime_plugin
 
-from flake8_harobed.util import skip_line
-from lint import lint, lint_external
+from .flake8_harobed.util import skip_line
+from .lint import lint, lint_external
 
-settings = sublime.load_settings("Flake8Lint.sublime-settings")
+_settings = [ None ]
+def settings():
+    if _settings[0] is None:
+        _settings[0] = sublime.load_settings("Flake8Lint.sublime-settings")
+    return _settings[0]
 FLAKE_DIR = os.path.dirname(os.path.abspath(__file__))
 viewToRegionToErrors = {}
 
@@ -55,11 +59,11 @@ class Flake8LintCommand(sublime_plugin.TextCommand):
             self.view.run_command('save')
 
         # try to get interpreter
-        interpreter = settings.get('python_interpreter', 'auto')
+        interpreter = settings().get('python_interpreter', 'auto')
 
         if not interpreter or interpreter == 'internal':
             # if interpreter is Sublime Text 2 internal python - lint file
-            self.errors_list = lint(filename, settings)
+            self.errors_list = lint(filename, settings())
         else:
             # else - check interpreter
             if interpreter == 'auto':
@@ -86,7 +90,7 @@ class Flake8LintCommand(sublime_plugin.TextCommand):
                 )
 
             # and lint file in subprocess
-            self.errors_list = lint_external(filename, settings,
+            self.errors_list = lint_external(filename, settings(),
                                              interpreter, linter)
 
         # show errors
@@ -100,8 +104,8 @@ class Flake8LintCommand(sublime_plugin.TextCommand):
         errors_to_show = []
 
         # get select and ignore settings
-        select = settings.get('select') or []
-        ignore = settings.get('ignore') or []
+        select = settings().get('select') or []
+        ignore = settings().get('ignore') or []
 
         errors = []
         warnings = []
@@ -121,11 +125,13 @@ class Flake8LintCommand(sublime_plugin.TextCommand):
             code, _ = e[2].split(' ', 1)
 
             # check if user has a setting for select only errors to show
-            if select and filter(lambda err: not code.startswith(err), select):
+            if (select and list(filter(lambda err: not code.startswith(err), 
+                    select))):
                 continue
 
             # check if user has a setting for ignore some errors
-            if ignore and filter(lambda err: code.startswith(err), ignore):
+            if (ignore and list(filter(lambda err: code.startswith(err), 
+                    ignore))):
                 continue
 
             # build line error message
@@ -143,16 +149,16 @@ class Flake8LintCommand(sublime_plugin.TextCommand):
             # it as an error.  Everything without a code (just syntax errror?)
             # are always errors
             if ((code.startswith('W') or code.startswith('E'))
-                    and code not in settings.get('errors', [])):
+                    and code not in settings().get('errors', [])):
                 warnings.append(region)
             else:
                 errors.append(region)
 
-        mark = 'circle' if settings.get('gutter_marks') else ''
+        mark = 'circle' if settings().get('gutter_marks') else ''
         style = self.FILL_STYLES.get(
-                settings.get('highlight_style')) or self.FILL_STYLES['fill']
+                settings().get('highlight_style')) or self.FILL_STYLES['fill']
 
-        if settings.get('highlight'):
+        if settings().get('highlight'):
             # It may not make much sense, but string is the best coloration,
             # as far as I can tell.
             self.view.add_regions('flake8_errors', errors,
@@ -166,12 +172,12 @@ class Flake8LintCommand(sublime_plugin.TextCommand):
         # renew errors list with selected and ignored errors
         self.errors_list = errors_list_filtered
 
-        if settings.get('popup'):
+        if settings().get('popup'):
             # view errors window
             self.view.window().show_quick_panel(errors_to_show,
                                                 self.error_selected)
 
-        if settings.get('results_pane'):
+        if settings().get('results_pane'):
             resultsPane = self._getResultsPane()
             
             edit = resultsPane.begin_edit()
@@ -225,9 +231,9 @@ class Flake8LintCommand(sublime_plugin.TextCommand):
         results = self.view.window().new_file()
         results.set_name('Lint Results')
         settings = results.settings()
-        settings.set('syntax', os.path.join(
+        settings().set('syntax', os.path.join(
                 'Packages', 'Default', 'Find Results.hidden-tmLanguage'))
-        settings.set('rulers', [6, 86])
+        settings().set('rulers', [6, 86])
 
         results.set_scratch(True)
         return results
@@ -258,7 +264,7 @@ class Flake8LintBackground(sublime_plugin.EventListener):
     Listen to Siblime Text 2 events.
     """
     def on_activated(self, view):
-        if settings.get('lint_on_load', True):
+        if settings().get('lint_on_load', True):
             if (view.id() not in viewToRegionToErrors
                     and view.file_name() is not None):
                 self._lintOnLoad(view)
@@ -266,9 +272,9 @@ class Flake8LintBackground(sublime_plugin.EventListener):
 
     def on_post_save(self, view):
         """
-        Do lint on file save if not denied in settings.
+        Do lint on file save if not denied in settings().
         """
-        if settings.get('lint_on_save', True):
+        if settings().get('lint_on_save', True):
             view.run_command('flake8_lint')
 
 
